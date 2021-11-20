@@ -1,0 +1,8 @@
+# IDE
+.vscode
+
+# sqlite application
+sqlite3.exe
+
+# database
+contacts.db
