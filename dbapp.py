@@ -27,6 +27,14 @@ class App:
         "d": ("d", "delete"),
         "h": ("h", "help")
     }
+    PARAMETERS = {
+        "l": {
+            "table": ("-t", "--table"),
+            "group": ("-g", "--group"),
+            "number": ("-n", "--number"),
+            "date": ("-d", "--date"),
+        }
+    }
 
     def __init__(self, language):
         self._language = language
@@ -73,11 +81,66 @@ class App:
             pass
 
     def show(self, parameters):
+        data = {"data": [], "table": None, "mode": None, "subdata": []}
+        valid = True
         if parameters:
-            pass
+            mode = None
+            for param in parameters:
+                if param[0] == "-":
+                    if param in self.PARAMETERS["l"]["table"]:
+                        mode = "table"
+                    elif param in self.PARAMETERS["l"]["group"]:
+                        mode = "group"
+                    elif param in self.PARAMETERS["l"]["number"]:
+                        mode = "number"
+                    elif param in self.PARAMETERS["l"]["date"]:
+                        mode == "date"
+                    else:
+                        valid = False
+                        data["data"] = "parameter"
+                        data["subdata"] = param
+                else:
+                    if mode == "table":
+                        data["data"], valid = self._db.select(param, {})
+                        data["table"] = param
+                        data["mode"] = "all"
+                    elif mode == "group":
+                        groups, valid = self._db.select("group", {"name": param})
+                        if groups:
+                            data["data"], valid = self._db.select("contact", {"group_id": int(data[0][0])})
+                            data["table"] = "contact"
+                            data["mode"] = "group"
+                            data["subdata"].extend(param)
+                        else:
+                            data["data"], valid = "group", False
+                    elif mode == "number":
+                        numbers, valid, similar = self._db.select("phone_number", {"number": param})
+                        if numbers:
+                            for number in numbers:
+                                rows, valid = self._db.select("contact", {"id": number[0]})
+                                data["data"].extend(rows)
+                                data["subdata"].append(number)
+                                data["table"] = "contact"
+                                data["mode"] = "number"
+                        else:
+                            valid = False
+                            data["data"] = "number"
+                            data["subdata"] = param
+                    elif mode == "date":
+                        pass
+                    else:
+                        rows, valid, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
+                        data["data"].extend(rows)
+                        data["table"] = "contact"
+                        data["mode"] = "name same"
+                        if similar:
+                            data["mode"] = "name similar"
+                        data["subdata"].append(param)
         else:
-            data, valid = self._db.select(self.DEFAULT_TABLE, {})
-            print(data)
+            data["data"], valid, _ = self._db.select(self.DEFAULT_TABLE, {})
+            data["table"] = "contact"
+            data["mode"] = "all"
+        print(data, valid)
 
     def insert(parameters):
         pass
@@ -141,28 +204,37 @@ class ContactDatabase:
         self.cursor = self.connection.cursor()
         self.create_database()
 
-    def select(self, table, parameters: dict):
+    def select(self, table, parameters: dict, operant="AND", similar=False):
         if table == "group":
             table = "contact_group"
         if table in self.TABLES:
             columns = self.TABLES[table]
         else:
-            return "table", False
+            return "table", False, similar
 
         where_param = ""
         if parameters:
             add_param = []
             for column in parameters:
                 if column not in self.TABLES[table].split(", "):
-                    return "column", False
-                add_param.append(f"{column}=?")
-            where_param += " WHERE " + " AND ".join(add_param)
+                    return "column", False, similar
+                if similar:
+                    add_param.append(f"{column} LIKE ?")
+                else:
+                    add_param.append(f"{column} = ?")
+            where_param += " WHERE " + f" {operant} ".join(add_param)
 
         if parameters:
-            self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(parameters.values()))
+            if similar:
+                self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(map(lambda p: f"%{p}%", parameters.values())))
+            else:
+                self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(parameters.values()))
         else:
             self.cursor.execute(f"SELECT {columns} FROM {table};")
-        return self.cursor.fetchall(), True
+
+        data = self.cursor.fetchall()
+        if data or similar: return data, True, similar
+        return self.select(table, parameters, operant, similar=True)
 
     def create_database(self):
         """
@@ -206,6 +278,7 @@ class ContactDatabase:
             """,
         ]
         self.cursor.execute("PRAGMA foreign_keys = ON;")
+        self.cursor.execute("PRAGMA case_sensitive_like = false;")
         for table in tables:
             self.cursor.execute(table)
         self.connection.commit()
