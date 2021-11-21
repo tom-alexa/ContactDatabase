@@ -87,21 +87,27 @@ class App:
             mode = None
             for param in parameters:
                 if param[0] == "-":
+                    param = param.lower()
                     if param in self.PARAMETERS["l"]["table"]:
                         mode = "table"
+                        data["mode"] = "table"
                     elif param in self.PARAMETERS["l"]["group"]:
                         mode = "group"
+                        data["mode"] = "group"
                     elif param in self.PARAMETERS["l"]["number"]:
                         mode = "number"
+                        data["mode"] = "number"
                     elif param in self.PARAMETERS["l"]["date"]:
-                        mode == "date"
+                        mode = "date"
+                        data["mode"] = "date"
                     else:
                         valid = False
-                        data["data"] = "parameter"
-                        data["subdata"] = param
+                        data["data"] = ["parameter"]
+                        data["subdata"].append(param)
+                        break
                 else:
                     if mode == "table":
-                        data["data"], valid = self._db.select(param, {})
+                        data["data"], valid, _ = self._db.select(param, {})
                         data["table"] = param
                         data["mode"] = "all"
                     elif mode == "group":
@@ -112,7 +118,7 @@ class App:
                             data["mode"] = "group"
                             data["subdata"].extend(param)
                         else:
-                            data["data"], valid = "group", False
+                            data["data"], valid = ["group"], False
                     elif mode == "number":
                         numbers, valid, similar = self._db.select("phone_number", {"number": param})
                         if numbers:
@@ -124,10 +130,20 @@ class App:
                                 data["mode"] = "number"
                         else:
                             valid = False
-                            data["data"] = "number"
-                            data["subdata"] = param
+                            data["data"] = ["number"]
+                            data["subdata"].append(param)
                     elif mode == "date":
-                        pass
+                        date = param.split("/")
+                        if len(date) != 3:
+                            valid = False
+                        elif any(map(lambda x: (x) and (not x.isnumeric()), date)):
+                            valid = False
+                        if not valid:
+                            data["data"] = ["date"]
+                            break
+                        data["data"], valid, _ = self._db.select("contact", {"date_of_birth": date})
+                        data["table"] = "contact"
+                        data["mode"] = "date"
                     else:
                         rows, valid, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
                         data["data"].extend(rows)
@@ -140,7 +156,7 @@ class App:
             data["data"], valid, _ = self._db.select(self.DEFAULT_TABLE, {})
             data["table"] = "contact"
             data["mode"] = "all"
-        print(data, valid)
+        self.print_show(data, valid)
 
     def insert(parameters):
         pass
@@ -158,6 +174,9 @@ class App:
 
     def print_options(self):
         print(self.TO_PRINT["print"]["options"][self._language])
+
+    def print_show(self, data, valid):
+        print(data, valid)
 
     def load_print_constants(self):
         self.DEFAULT_TABLE = "contact"
@@ -177,7 +196,7 @@ class App:
             "print": {
                 "options": {
                     "en": f"{dash_options}\nH {comma*20} show this table\nL {comma*20} list all contacts\nL (contact name) ... show contact with given name or similar ones\nL -n (number) ... show contacts with given number or similar\nL -g (group) ... show contacts within group\nL -t (table) ... show all rows in a table\nL -d (date) ... show contacts that date of birth matches with given date → format: YYYY-MM-DD\n{space*78}day: --DD\n{space*76}month: -MM-\n{space*77}year: YYYY--\nI ... insert row into contact table\nI -t (table) ... insert row into table\nD ... delete row from contact table\nD -t (table) ... delete row from table\nQ ... quit the application\n{dash*20}",
-                    "cz": f"{spaces_options}{dash_options}\n{spaces_options}| H {comma*16} ukáže tuto tabulku{space*40}|\n{spaces_options}| L (jméno) {comma*8} ukáže kontakt podle jména nebo podobné kontakty{space*11}|\n{spaces_options}| L -n (číslo) {comma*5} ukáže kontakty podle čísla nebo podobné kontakty{space*10}|\n{spaces_options}| L -g (skupina) {comma*3} ukáže kontakty ve skupině{space*33}|\n{spaces_options}| L -t (tabulka) {comma*3} ukáže všechny řádky v tabulce{space*29}|\n{spaces_options}| L -d (datum) {comma*5} ukáže kontakty podle data narození → formát: YYYY-MM-DD{space*3}|\n{spaces_options}|{space*60}den: --DD{space*9}|\n{spaces_options}|{space*58}měsíc: -MM-{space*9}|\n{spaces_options}|{space*60}rok: YYYY--{space*7}|\n{spaces_options}| I {comma*16} vloží kontakt do tabulky{space*34}|\n{spaces_options}| I -t (tabulka) {comma*3} vloží řádek do tabulky{space*36}|\n{spaces_options}| D {comma*16} odstraní kontakt{space*42}|\n{spaces_options}| D -t (tabulka) {comma*3} odstraní řádek z tabulky{space*34}|\n{spaces_options}| Q {comma*16} ukončí aplikaci{space*43}|\n{spaces_options}{dash_options}",
+                    "cz": f"{spaces_options}{dash_options}\n{spaces_options}| H {comma*16} ukáže tuto tabulku{space*40}|\n{spaces_options}| L (jméno) {comma*8} ukáže kontakt podle jména nebo podobné kontakty{space*11}|\n{spaces_options}| L -n (číslo) {comma*5} ukáže kontakty podle čísla nebo podobné kontakty{space*10}|\n{spaces_options}| L -g (skupina) {comma*3} ukáže kontakty ve skupině{space*33}|\n{spaces_options}| L -t (tabulka) {comma*3} ukáže všechny řádky v tabulce{space*29}|\n{spaces_options}| L -d (datum) {comma*5} ukáže kontakty podle data narození → formát: YYYY/MM/DD{space*3}|\n{spaces_options}|{space*60}den: //DD{space*9}|\n{spaces_options}|{space*58}měsíc: /MM/{space*9}|\n{spaces_options}|{space*60}rok: YYYY//{space*7}|\n{spaces_options}| I {comma*16} vloží kontakt do tabulky{space*34}|\n{spaces_options}| I -t (tabulka) {comma*3} vloží řádek do tabulky{space*36}|\n{spaces_options}| D {comma*16} odstraní kontakt{space*42}|\n{spaces_options}| D -t (tabulka) {comma*3} odstraní řádek z tabulky{space*34}|\n{spaces_options}| Q {comma*16} ukončí aplikaci{space*43}|\n{spaces_options}{dash_options}",
                 },
                 "wrong": {
                     "en": f"{space*6}Bash *?* does not exists!\n",
@@ -210,25 +229,45 @@ class ContactDatabase:
         if table in self.TABLES:
             columns = self.TABLES[table]
         else:
-            return "table", False, similar
+            return ["table"], False, similar
 
         where_param = ""
         if parameters:
             add_param = []
-            for column in parameters:
+            values = []
+            for column, value in parameters.items():
                 if column not in self.TABLES[table].split(", "):
-                    return "column", False, similar
+                    return ["column"], False, similar
+                if column == "date_of_birth":
+                    add_param.append(r"strftime('%Y', date_of_birth) = ? OR strftime('%m', date_of_birth) = ? OR strftime('%d', date_of_birth) = ?")
+                    year = value[0]
+                    month = value[1]
+                    day = value[2]
+                    if year:
+                        values.append(f"{int(year):04d}")
+                    else:
+                        values.append(year)
+                    if month:
+                        values.append(f"{int(month):02d}")
+                    else:
+                        values.append(month)
+                    if day:
+                        values.append(f"{int(day):02d}")
+                    else:
+                        values.append(day)
+                    continue
                 if similar:
                     add_param.append(f"{column} LIKE ?")
                 else:
                     add_param.append(f"{column} = ?")
+                values.append(value)
             where_param += " WHERE " + f" {operant} ".join(add_param)
 
         if parameters:
             if similar:
-                self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(map(lambda p: f"%{p}%", parameters.values())))
+                self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(map(lambda v: f"%{v}%", values)))
             else:
-                self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(parameters.values()))
+                self.cursor.execute(f"SELECT {columns} FROM {table}{where_param};", tuple(values))
         else:
             self.cursor.execute(f"SELECT {columns} FROM {table};")
 
