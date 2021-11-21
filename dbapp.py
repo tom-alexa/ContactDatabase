@@ -35,6 +35,12 @@ class App:
             "date": ("-d", "--date"),
         }
     }
+    TABLES = {
+        "contact": ("contact", "contacts", "c"),
+        "phone_number": ("phone_number", "phone_numbers", "number", "numbers", "n"),
+        "prefix": ("prefix", "prefixes", "p"),
+        "contact_group": ("contact_group", "contact_groups", "group", "groups", "g")
+    }
 
     def __init__(self, language):
         self._language = language
@@ -81,8 +87,10 @@ class App:
             pass
 
     def show(self, parameters):
-        data = {"data": [], "table": None, "mode": None, "subdata": []}
+        data = {"data": [], "name": "", "subdata": [], "input": "", "chosen": ""}
         valid = True
+        done = False
+        with_prefix = False
         if parameters:
             mode = None
             for param in parameters:
@@ -90,72 +98,110 @@ class App:
                     param = param.lower()
                     if param in self.PARAMETERS["l"]["table"]:
                         mode = "table"
-                        data["mode"] = "table"
                     elif param in self.PARAMETERS["l"]["group"]:
                         mode = "group"
-                        data["mode"] = "group"
                     elif param in self.PARAMETERS["l"]["number"]:
                         mode = "number"
-                        data["mode"] = "number"
                     elif param in self.PARAMETERS["l"]["date"]:
                         mode = "date"
-                        data["mode"] = "date"
                     else:
                         valid = False
-                        data["data"] = ["parameter"]
-                        data["subdata"].append(param)
+                        data["name"] = "parameter"
+                        data["input"] = param
                         break
                 else:
                     if mode == "table":
-                        data["data"], valid, _ = self._db.select(param, {})
-                        data["table"] = param
-                        data["mode"] = "all"
-                    elif mode == "group":
-                        groups, valid = self._db.select("group", {"name": param})
-                        if groups:
-                            data["data"], valid = self._db.select("contact", {"group_id": int(data[0][0])})
-                            data["table"] = "contact"
-                            data["mode"] = "group"
-                            data["subdata"].extend(param)
-                        else:
-                            data["data"], valid = ["group"], False
-                    elif mode == "number":
-                        numbers, valid, similar = self._db.select("phone_number", {"number": param})
-                        if numbers:
-                            for number in numbers:
-                                rows, valid = self._db.select("contact", {"id": number[0]})
-                                data["data"].extend(rows)
-                                data["subdata"].append(number)
-                                data["table"] = "contact"
-                                data["mode"] = "number"
+                        data["input"] = param
+                        for table, values in self.TABLES.items():
+                            if param in values:
+                                break
                         else:
                             valid = False
-                            data["data"] = ["number"]
-                            data["subdata"].append(param)
+                            data["name"] = "table"
+                            break
+                        data["chosen"] = table
+                        data["data"], valid, _ = self._db.select(table, {})
+                        data["name"] = f"all {table}"
+                        break
+                    elif mode == "group":
+                        data["input"] = param
+                        groups, valid, similar_groups = self._db.select("contact_group", {"name": param})
+                        if groups:
+                            if similar_groups:
+                                data["data"] = groups
+                                data["name"] =  "group similar"
+                                valid = False
+                                break
+                            data["data"], valid, similar = self._db.select("contact", {"group_id": int(groups[0][0])})
+                            if similar:
+                                valid = False
+                                data["name"] = "group similar contact"
+                                break
+                            else:
+                                data["name"] = "group contact"
+                                break
+                        else:
+                            valid = False
+                            data["name"] = "no group"
+                            break
+                    elif mode == "number":
+                        done = True
+                        if param[0] == "+":
+                            with_prefix = True
+                            prefixes, valid, similar = self._db.select("prefix", {"prefix": param[1:]})
+                            data["input"] = f"{param} "
+                            if similar:
+                                data["data"] = prefixes.copy()
+                                data["name"] = "similar prefix"
+                                break
+                            current_numbers, valid, similar = self._db.select("phone_number", {"prefix_id": prefixes[0][0]})
+                            data["data"] = current_numbers.copy()
+                            data["name"] = "prefix contact"
+                            continue
+                        data["input"] += param
+                        numbers, valid, _ = self._db.select("phone_number", {"number": param}, similar=True)
+                        if with_prefix:
+                            numbers = list(set(numbers).intersection(current_numbers))
+                        if numbers:
+                            data["name"] = "number contact"
+                            data["subdata"] = numbers.copy()
+                            for number in numbers:
+                                data["data"], valid, _ = self._db.select("contact", {"id": number[3]})
+                            break
+                        else:
+                            valid = False
+                            data["name"] = "no number"
+                            break
                     elif mode == "date":
+                        data["input"] = param
                         date = param.split("/")
                         if len(date) != 3:
                             valid = False
+                            data["name"] = "split date"
+                            break
                         elif any(map(lambda x: (x) and (not x.isnumeric()), date)):
                             valid = False
-                        if not valid:
-                            data["data"] = ["date"]
+                            data["name"] = "non-numerical date"
                             break
                         data["data"], valid, _ = self._db.select("contact", {"date_of_birth": date})
-                        data["table"] = "contact"
-                        data["mode"] = "date"
+                        data["name"] = "date contact"
+                        break
                     else:
                         rows, valid, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
                         data["data"].extend(rows)
-                        data["table"] = "contact"
-                        data["mode"] = "name same"
-                        if similar:
-                            data["mode"] = "name similar"
-                        data["subdata"].append(param)
+                        if (data["name"] != "name similar contact") and not similar:
+                            data["name"] = "name same contact"
+                        else:
+                            data["name"] = "name similar contact"
+                        data["input"] += f"{param} "
+                        done = True
+            else:
+                if not done:
+                    valid = False
+                    data["name"] = "no parameter"
         else:
             data["data"], valid, _ = self._db.select(self.DEFAULT_TABLE, {})
-            data["table"] = "contact"
-            data["mode"] = "all"
+            data["name"] = "all contact"
         self.print_show(data, valid)
 
     def insert(parameters):
@@ -224,12 +270,11 @@ class ContactDatabase:
         self.create_database()
 
     def select(self, table, parameters: dict, operant="AND", similar=False):
-        if table == "group":
-            table = "contact_group"
+
         if table in self.TABLES:
             columns = self.TABLES[table]
         else:
-            return ["table"], False, similar
+            return "table", False, similar
 
         where_param = ""
         if parameters:
@@ -237,7 +282,7 @@ class ContactDatabase:
             values = []
             for column, value in parameters.items():
                 if column not in self.TABLES[table].split(", "):
-                    return ["column"], False, similar
+                    return "column", False, similar
                 if column == "date_of_birth":
                     add_param.append(r"strftime('%Y', date_of_birth) = ? OR strftime('%m', date_of_birth) = ? OR strftime('%d', date_of_birth) = ?")
                     year = value[0]
