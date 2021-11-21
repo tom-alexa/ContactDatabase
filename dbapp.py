@@ -128,18 +128,13 @@ class App:
                         groups, valid, similar_groups = self._db.select("contact_group", {"name": param})
                         if groups:
                             if similar_groups:
+                                valid = False
                                 data["data"] = groups
-                                data["name"] =  "group similar"
-                                valid = False
+                                data["name"] =  "similar group"
                                 break
-                            data["data"], valid, similar = self._db.select("contact", {"group_id": int(groups[0][0])})
-                            if similar:
-                                valid = False
-                                data["name"] = "group similar contact"
-                                break
-                            else:
-                                data["name"] = "group contact"
-                                break
+                            data["data"], valid, _ = self._db.select("contact", {"group_id": int(groups[0][0])})
+                            data["name"] = "group contact"
+                            break
                         else:
                             valid = False
                             data["name"] = "no group"
@@ -199,8 +194,15 @@ class App:
                 if not done:
                     valid = False
                     data["name"] = "no parameter"
+                    data["input"] = mode
         else:
-            data["data"], valid, _ = self._db.select(self.DEFAULT_TABLE, {})
+            data["data"], valid, _ = self._db.select("contact", {})
+            for contact in data["data"]:
+                groups, valid, _ = self._db.select("contact_group", {"id": contact[4]})
+                if groups:
+                    data["subdata"].append(groups[0][1])
+                else:
+                    data["subdata"].append(None)
             data["name"] = "all contact"
         self.print_show(data, valid)
 
@@ -222,10 +224,29 @@ class App:
         print(self.TO_PRINT["print"]["options"][self._language])
 
     def print_show(self, data, valid):
-        print(data, valid)
+        space = " "
+        dash = "-"
+
+        name = data["name"]
+        if name == "all contact":
+            print("\n" + self.TO_PRINT["print"]["all contact"][self._language])
+            for contact, group in zip(data["data"], data["subdata"]):
+                c_id = contact[0]
+                first_name = contact[1] if (contact[1] != None) else ""
+                last_name = contact[2] if (contact[2] != None) else ""
+                date_of_birth = contact[3] if (contact[3] != None) else ""
+                group = group if (group != None) else ""
+                street = contact[5] if (contact[5] != None) else ""
+                number = contact[6] if (contact[6] != None) else ""
+                city = contact[7] if (contact[7] != None) else ""
+
+                print(f"{space*6}| {c_id:>6} | {first_name:>12} | {last_name:<12} | {date_of_birth:<10} | {group:<10} | {street:<10} | {number:<6} | {city:<20} |")
+        elif name == "no parameter":
+            i = data["input"]
+            print(self.TO_PRINT["print"]["no parameter"][self._language].replace("*?*", f"'{i}'"))
+        print()
 
     def load_print_constants(self):
-        self.DEFAULT_TABLE = "contact"
 
         dash = "-"
         space = " "
@@ -247,6 +268,14 @@ class App:
                 "wrong": {
                     "en": f"{space*6}Bash *?* does not exists!\n",
                     "cz": f"{space*6}Příkaz *?* neexistuje!\n",
+                },
+                "all contact": {
+                    "en": f"{space*6}| {space*4}id | {space*7}Jméno | Příjmení{space*4} | Datum nar. | Skupina{space*3} | Ulice{space*5} | ČP.{space*3} | Město{space*15} |",
+                    "cz": f"{space*6}| {space*4}id | {space*7}Jméno | Příjmení{space*4} | Datum nar. | Skupina{space*3} | Ulice{space*5} | ČP.{space*3} | Město{space*15} |\n{space*6}{dash*110}",
+                },
+                "no parameter": {
+                    "en": "no parameter",
+                    "cz": f"{space*6}Pro *?* chybí parameter"
                 }
             }
         }
