@@ -1,4 +1,3 @@
-
 # Program: dbapp.py
 # Author: Tom Alexa
 
@@ -48,6 +47,10 @@ class App:
         self._db = ContactDatabase()
         self.running = True
 
+    ##########
+    #  main  #
+    ##########
+
     def run(self):
         """
         Main running loop
@@ -86,101 +89,40 @@ class App:
         elif option in self.OPTIONS["d"]:   # delete
             pass
 
+    ##########
+    #  show  #
+    ##########
+
     def show(self, parameters):
-        data = {"data": [], "name": "", "subdata": [], "input": "", "chosen": ""}
-        valid = True
-        done = False
-        with_prefix = False
+        data = {"data": [], "name": "", "input": "", "chosen": "", "valid": True}
         if parameters:
             mode = None
             for param in parameters:
                 if param[0] == "-":
-                    param = param.lower()
-                    if param in self.PARAMETERS["l"]["table"]:
-                        mode = "table"
-                    elif param in self.PARAMETERS["l"]["group"]:
-                        mode = "group"
-                    elif param in self.PARAMETERS["l"]["number"]:
-                        mode = "number"
-                    elif param in self.PARAMETERS["l"]["date"]:
-                        mode = "date"
-                    else:
-                        valid = False
-                        data["name"] = "parameter"
-                        data["input"] = param
+                    mode = self.get_parameter_mode(data, param)
+                    if not self.check_valid_param(data, param, "parameter"):
                         break
+
                 else:
                     if mode == "table":
-                        data["input"] = param
-                        for table, values in self.TABLES.items():
-                            if param in values:
-                                break
-                        else:
-                            valid = False
-                            data["name"] = "table"
-                            break
-                        data["chosen"] = table
-                        data["data"], valid, _ = self._db.select(table, {})
-                        data["name"] = f"all {table}"
+                        self.mode_table(data, param)
+                        self.check_valid_param(data, param, "table")
                         break
+
                     elif mode == "group":
-                        data["input"] = param
-                        groups, valid, similar_groups = self._db.select("contact_group", {"name": param})
-                        if groups:
-                            if similar_groups:
-                                valid = False
-                                data["data"] = groups
-                                data["name"] =  "similar group"
-                                break
-                            data["data"], valid, _ = self._db.select("contact", {"group_id": int(groups[0][0])})
-                            data["name"] = "group contact"
-                            break
-                        else:
-                            valid = False
-                            data["name"] = "no group"
-                            break
-                    elif mode == "number":
-                        done = True
-                        if param[0] == "+":
-                            with_prefix = True
-                            prefixes, valid, similar = self._db.select("prefix", {"prefix": param[1:]})
-                            data["input"] = f"{param} "
-                            if similar:
-                                data["data"] = prefixes.copy()
-                                data["name"] = "similar prefix"
-                                break
-                            current_numbers, valid, similar = self._db.select("phone_number", {"prefix_id": prefixes[0][0]})
-                            data["data"] = current_numbers.copy()
-                            data["name"] = "prefix contact"
-                            continue
-                        data["input"] += param
-                        numbers, valid, _ = self._db.select("phone_number", {"number": param}, similar=True)
-                        if with_prefix:
-                            numbers = list(set(numbers).intersection(current_numbers))
-                        if numbers:
-                            data["name"] = "number contact"
-                            data["subdata"] = numbers.copy()
-                            for number in numbers:
-                                data["data"], valid, _ = self._db.select("contact", {"id": number[3]})
-                            break
-                        else:
-                            valid = False
-                            data["name"] = "no number"
-                            break
-                    elif mode == "date":
-                        data["input"] = param
-                        date = param.split("/")
-                        if len(date) != 3:
-                            valid = False
-                            data["name"] = "split date"
-                            break
-                        elif any(map(lambda x: (x) and (not x.isnumeric()), date)):
-                            valid = False
-                            data["name"] = "non-numerical date"
-                            break
-                        data["data"], valid, _ = self._db.select("contact", {"date_of_birth": date})
-                        data["name"] = "date contact"
+                        self.mode_group(data, param)
+                        self.check_valid_param(data, param)
                         break
+
+                    elif mode == "number":
+                        done = self.mode_number(data, param)
+                        self.check_valid_param(data, param)
+                        if done: break
+
+                    elif mode == "date":
+                        self.mode_data(data, param)
+
+
                     else:
                         rows, valid, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
                         data["data"].extend(rows)
@@ -191,20 +133,226 @@ class App:
                         data["input"] += f"{param} "
                         done = True
             else:
-                if not done:
-                    valid = False
-                    data["name"] = "no parameter"
-                    data["input"] = mode
+                if not data["input"]:
+                    data["name"] = f"no parameter {mode}"
         else:
-            data["data"], valid, _ = self._db.select("contact", {})
-            for contact in data["data"]:
-                groups, valid, _ = self._db.select("contact_group", {"id": contact[4]})
-                if groups:
-                    data["subdata"].append(groups[0][1])
-                else:
-                    data["subdata"].append(None)
-            data["name"] = "all contact"
-        self.print_show(data, valid)
+            self.mode_table(data, "contact")
+        print(data)
+        self.print_show(data)
+
+    #########################
+    #  show → subfunctions  #
+    #########################
+
+    def valid_option(self, option):
+        for values in self.OPTIONS.values():
+            if option in values: return True
+        else: return False
+
+    def get_parameter_mode(self, data, param):
+        param = param.lower()
+        if param in self.PARAMETERS["l"]["table"]:
+            mode = "table"
+        elif param in self.PARAMETERS["l"]["group"]:
+            mode = "group"
+        elif param in self.PARAMETERS["l"]["number"]:
+            mode = "number"
+        elif param in self.PARAMETERS["l"]["date"]:
+            mode = "date"
+        else:
+            mode = None
+            data["valid"] = False
+        return mode
+
+    def check_valid_param(self, data, param, error_name=None):
+        if not data["valid"]:
+            data["input"] = param
+            if error_name:
+                data["name"] = error_name
+            return False
+        return True
+
+    ##################
+    #  show → modes  #
+    ##################
+
+    def mode_table(self, data, table_name):
+        data["input"] = table_name
+        for table, values in self.TABLES.items():
+            if table_name in values:
+                break
+        else:
+            data["valid"] = False
+            data["name"] = "table"
+            return
+        data["chosen"] = table
+        data["data"], _, _ = self._db.select(table, {})
+        data["name"] = f"all {table}"
+
+        if table == "contact":
+            self.change_to_group(data)
+        elif table == "phone_number":
+            self.add_plus_sign(data)
+        elif table == "prefix":
+            self.add_plus_sign(data)
+
+    def mode_group(self, data, group_name):
+        groups, _, similar_groups = self._db.select("contact_group", {"name": group_name})
+        if not groups:
+            data["valid"] = False
+            data["name"] = "no group"
+            return
+        if similar_groups:
+            data["valid"] = False
+            data["data"] = groups
+            data["name"] =  "similar group"
+            return
+        data["chosen"] = groups[0][1]
+        data["data"], _, _ = self._db.select("contact", {"group_id": int(groups[0][0])})
+        data["name"] = "group contact"
+
+    def mode_number(self, data, param):
+        if not (param.isnumeric() and int(param) > 0):
+            if (param[0] != "+") or (not param[1:].isnumeric()):
+                data["valid"] = False
+                data["name"] = "not number"
+                return True
+
+        if param[0] == "+":
+            prefixes, _, similar = self._db.select("prefix", {"prefix": param[1:]})
+            data["input"] = param
+            if similar:
+                data["valid"] = False
+                data["data"] = prefixes
+                data["name"] = "similar prefix"
+                return True
+
+            data["data"], _, _ = self._db.select("phone_number", {"prefix_id": prefixes[0][0]})
+            data["name"] = "prefix contact"
+            return False
+
+        if data["input"]:
+            data["input"] += f"{param} "
+            numbers, _, _ = self._db.select("phone_number", {"number": param, "prefix_id": data["input"][1:]}, similar=True)
+        else:
+            numbers, _, _ = self._db.select("phone_number", {"number": param}, similar=True)
+            data["input"] = param
+
+        if not numbers:
+            data["valid"] = False
+            data["name"] = "no number"
+            return True
+
+        data["name"] = "number contact"
+        active_ids = set()
+        data["data"] = {}
+        for number in numbers:
+            rows, _, _ = self._db.select("contact", {"id": number[3]})
+            contact_id = rows[0][0]
+            if contact_id in active_ids:
+                data["data"][contact_id]["numbers"].append(number)
+                continue
+            active_ids.add(contact_id)
+            data["data"][contact_id] = {"contact": rows[0], "numbers": [number]}
+        return True
+
+    def mode_date(self, data, param):
+        data["input"] = param
+        date = param.split("/")
+        # if len(date) != 3:
+        #     valid = False
+        #     data["name"] = "split date"
+        #     break
+        # elif any(map(lambda x: (x) and (not x.isnumeric()), date)):
+        #     valid = False
+        #     data["name"] = "non-numerical date"
+        #     break
+        # data["data"], valid, _ = self._db.select("contact", {"date_of_birth": date})
+        # data["name"] = "date contact"
+        # break
+
+    ##########################
+    #  show → modes → table  #
+    ##########################
+
+    def change_to_group(self, data):
+        for i, row in enumerate(data["data"].copy()):
+            if row[4]:
+                groups, _, _ = self._db.select("contact_group", {"id": row[4]})
+                data["data"][i] = list(row)
+                data["data"][i][4] = groups[0][1]
+                data["data"][i] = tuple(data["data"][i])
+
+    def add_plus_sign(self, data):
+        for i, row in enumerate(data["data"].copy()):
+            if row[1]:
+                data["data"][i] = list(row)
+                data["data"][i][1] = f"+{row[1]}"
+                data["data"][i] = tuple(data["data"][i])
+
+    ##################
+    #  show → print  #
+    ##################
+
+    def print_show(self, data):
+        space = " "
+        dash = "-"
+
+        name = data["name"]
+        if "all" in name:
+            all_constants = self.TO_PRINT["print"][name]
+            spaces = all_constants["spaces"]
+
+            columns_length = {"header": [], "values": []}
+            for column_name in all_constants["columns"][self._language]:
+                str_col_name = f" {column_name} "
+                columns_length["header"].append(
+                    {
+                        "text": str_col_name,
+                        "length": len(str_col_name)
+                    }
+                )
+
+            for i, row in enumerate(data["data"]):
+                t = 1
+                columns_length["values"].append([])
+                for j, column in enumerate(row):
+                    if column == None:
+                        column = ""
+                    str_col = f" {column} "
+                    columns_length["values"][i].append(str_col)
+                    t += len(str_col) + 1
+                    columns_length["header"][j]["length"] = max(columns_length["header"][j]["length"], len(str_col))
+
+            total_length = 1
+            for column in columns_length["header"]:
+                total_length += column["length"] + 1
+
+            print(f"\n{spaces}|", end="")
+            for i, column in enumerate(columns_length["header"]):
+                column_name = column["text"]
+                current_spaces = space * (columns_length["header"][i]["length"] - len(column_name))
+                print(f"{column_name}{current_spaces}|", end="")
+            
+            print(f"\n{spaces}{dash*total_length}")
+
+            for i, row in enumerate(columns_length["values"]):
+                print(f"{spaces}|", end="")
+                for j, column_value in enumerate(row):
+                    current_spaces = space * (columns_length["header"][j]["length"] - len(column_value))
+                    print(f"{column_value}{current_spaces}|", end="")
+                print()
+
+
+
+        elif name == "no parameter":
+            i = data["input"]
+            print(self.TO_PRINT["print"]["no parameter"][self._language].replace("*?*", f"'{i}'"))
+        print()
+
+    ############
+    #  insert  #
+    ############
 
     def insert(parameters):
         pass
@@ -212,39 +360,19 @@ class App:
     def delete(parameters):
         pass
 
+    ###########
+    #  print  #
+    ###########
+
     def wrong_command(self, option):
         print(self.TO_PRINT["print"]["wrong"][self._language].replace("*?*", f"'{option}'"))
-
-    def valid_option(self, option):
-        for values in self.OPTIONS.values():
-            if option in values: return True
-        else: return False
 
     def print_options(self):
         print(self.TO_PRINT["print"]["options"][self._language])
 
-    def print_show(self, data, valid):
-        space = " "
-        dash = "-"
-
-        name = data["name"]
-        if name == "all contact":
-            print("\n" + self.TO_PRINT["print"]["all contact"][self._language])
-            for contact, group in zip(data["data"], data["subdata"]):
-                c_id = contact[0]
-                first_name = contact[1] if (contact[1] != None) else ""
-                last_name = contact[2] if (contact[2] != None) else ""
-                date_of_birth = contact[3] if (contact[3] != None) else ""
-                group = group if (group != None) else ""
-                street = contact[5] if (contact[5] != None) else ""
-                number = contact[6] if (contact[6] != None) else ""
-                city = contact[7] if (contact[7] != None) else ""
-
-                print(f"{space*6}| {c_id:>6} | {first_name:>12} | {last_name:<12} | {date_of_birth:<10} | {group:<10} | {street:<10} | {number:<6} | {city:<20} |")
-        elif name == "no parameter":
-            i = data["input"]
-            print(self.TO_PRINT["print"]["no parameter"][self._language].replace("*?*", f"'{i}'"))
-        print()
+    #######################
+    #  print → constants  #
+    #######################
 
     def load_print_constants(self):
 
@@ -270,8 +398,32 @@ class App:
                     "cz": f"{space*6}Příkaz *?* neexistuje!\n",
                 },
                 "all contact": {
-                    "en": f"{space*6}| {space*4}id | {space*7}Jméno | Příjmení{space*4} | Datum nar. | Skupina{space*3} | Ulice{space*5} | ČP.{space*3} | Město{space*15} |",
-                    "cz": f"{space*6}| {space*4}id | {space*7}Jméno | Příjmení{space*4} | Datum nar. | Skupina{space*3} | Ulice{space*5} | ČP.{space*3} | Město{space*15} |\n{space*6}{dash*110}",
+                    "spaces": f"{space*6}",
+                    "columns": {
+                        "en": ["ID", "First name", "Last name", "Date of birth", "Group", "Street", "Number of descriptive", "City"],
+                        "cz": ["ID", "Jméno", "Příjmení", "Datum narození", "Skupina", "Ulice", "Číslo popisné", "Město"],
+                    }
+                },
+                "all contact_group": {
+                    "spaces": f"{space*6}",
+                    "columns": {
+                        "en": ["ID", "Group"],
+                        "cz": ["ID", "Skupina"]
+                    }
+                },
+                "all prefix": {
+                    "spaces": f"{space*6}",
+                    "columns": {
+                        "en": ["ID", "Prefix", "State"],
+                        "cz": ["ID", "Předčíslí", "Stát"]
+                    }
+                },
+                "all phone_number": {
+                    "spaces": f"{space*6}",
+                    "columns": {
+                        "en": ["ID", "Prefix", "Number", "Contact"],
+                        "cz": ["ID", "Předčíslí", "Číslo", "Kontakt"]
+                    }
                 },
                 "no parameter": {
                     "en": "no parameter",
@@ -279,6 +431,10 @@ class App:
                 }
             }
         }
+
+    #############
+    #  general  #
+    #############
 
     def close(self):
         self._db.close()
