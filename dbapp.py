@@ -1,3 +1,4 @@
+
 # Program: dbapp.py
 # Author: Tom Alexa
 
@@ -63,7 +64,7 @@ class App:
 
     def get_option(self):
         """
-        Input format: option parameter parameter, ex. l -t contact
+        Input format: 'option' 'parameter' 'parameter', ex. l -t contact
         Return: option, parameters (ex. 'l', ['-t', 'contact'])
         """
         while True:
@@ -78,6 +79,9 @@ class App:
             return option, parameters
 
     def manage_option(self, option, parameters):
+        """
+        Manage user input and do something
+        """
         if option in self.OPTIONS["q"]:     # quit
             self.running = False
         elif option in self.OPTIONS["h"]:   # help
@@ -94,6 +98,10 @@ class App:
     ##########
 
     def show(self, parameters):
+        """
+        User option 'L'
+        Show something from the database
+        """
         data = {"data": [], "name": "", "input": "", "chosen": "", "valid": True}
         if parameters:
             mode = None
@@ -136,11 +144,18 @@ class App:
     #########################
 
     def valid_option(self, option):
+        """
+        Check if option is in valid OPTIONS
+        Return: True or False
+        """
         for values in self.OPTIONS.values():
             if option in values: return True
         return False
 
     def get_parameter_mode(self, data, param):
+        """
+        Return mode for the next parameter
+        """
         param = param.lower()
         if param in self.PARAMETERS["l"]["table"]:
             mode = "table"
@@ -156,6 +171,10 @@ class App:
         return mode
 
     def check_valid_param(self, data, param, error_name=None):
+        """
+        Check if data['valid'] is True or False
+        If so change some data
+        """
         if not data["valid"]:
             data["input"] = param
             if error_name:
@@ -168,6 +187,9 @@ class App:
     ##################
 
     def mode_name(self, data, param):
+        """
+        Select contacts with first name or last name equal or similar with given parameter
+        """
         rows, _, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
         for row in rows:
             if row not in data["data"]:
@@ -180,6 +202,9 @@ class App:
         data["input"] += f"{param} "
 
     def mode_table(self, data, table_name):
+        """
+        Select rows from given table name
+        """
         data["input"] = table_name
         for table, values in self.TABLES.items():
             if table_name in values:
@@ -201,6 +226,9 @@ class App:
             self.add_plus_sign(data)
 
     def mode_group(self, data, group_name):
+        """
+        Select contacts that belong to the group with given group name
+        """
         groups, _, similar_groups = self._db.select("contact_group", {"name": group_name})
         if not groups:
             data["valid"] = False
@@ -217,6 +245,9 @@ class App:
         self.change_to_group(data)
 
     def mode_number(self, data, param):
+        """
+        Select contacts with same or similar phone numbers
+        """
         if not (param.isnumeric() and int(param) > 0):
             if (param[0] != "+") or (not param[1:].isnumeric()):
                 data["valid"] = False
@@ -262,6 +293,9 @@ class App:
         return True
 
     def mode_date(self, data, param):
+        """
+        Select contacts with same date of birth as given date (year, month or day)
+        """
         data["input"] = param
         date = param.split("/")
         if len(date) != 3:
@@ -275,7 +309,6 @@ class App:
         elif not all(map(lambda x: x.isnumeric(), filter(None, date))):
             data["valid"] = False
             data["name"] = "non-numerical date"
-            print("yy")
             return
         data["data"], _, _ = self._db.select("contact", {"date_of_birth": date})
         data["name"] = "date contact"
@@ -286,6 +319,9 @@ class App:
     ##########################
 
     def change_to_group(self, data):
+        """
+        Change group id to group name
+        """
         for i, row in enumerate(data["data"].copy()):
             if row[4]:
                 groups, _, _ = self._db.select("contact_group", {"id": row[4]})
@@ -294,6 +330,9 @@ class App:
                 data["data"][i] = tuple(data["data"][i])
 
     def change_to_contact_name(self, data):
+        """
+        Change contact id to contact first name and last name
+        """
         for i, row in enumerate(data["data"].copy()):
             if row[3]:
                 contacts, _, _ = self._db.select("contact", {"id": row[3]})
@@ -305,6 +344,9 @@ class App:
                 data["data"][i] = tuple(data["data"][i])
 
     def add_plus_sign(self, data):
+        """
+        Add '+' in front of prefix
+        """
         for i, row in enumerate(data["data"].copy()):
             if row[1]:
                 data["data"][i] = list(row)
@@ -316,6 +358,9 @@ class App:
     ##################
 
     def print_show(self, data):
+        """
+        Print some data from the database
+        """
         name = data["name"]
         if "all" in name:
             self.print_table(data)
@@ -335,9 +380,28 @@ class App:
         elif name == "no group":
             self.print_table(data, name="all contact_group")
 
+        elif name == "number contact":
+            # self.print_table(data, name="all contact", subdata=True)
+            pass
+
         elif name == "not number":
             parameter = data["input"]
             print(self.TO_PRINT["print"]["not number"][self._language].replace("*?*", f"'{parameter}'"))
+
+        elif name == "prefix contact":
+            self.print_table(data, name="all phone_number", subdata=True)
+
+        elif name == "similar prefix":
+            self.print_table(data, name="all prefix", subdata=True)
+
+        elif name == "split date":
+            print(self.TO_PRINT["print"]["split date"][self._language])
+
+        elif name == "non-numerical date":
+            print(self.TO_PRINT["print"]["non-numerical date"][self._language])
+
+        elif name == "date contact":
+            self.print_table(data, name="all contact")
 
         elif "no parameter" in name:
             mode = name[13:]
@@ -351,11 +415,12 @@ class App:
             elif name == "table":
                 table = data["input"]
                 print(self.TO_PRINT["print"]["table"][self._language].replace("*?*", f"'{table}'"))
-
         print()
-        print(data)
 
-    def print_table(self, data, name=None):
+    def print_table(self, data, name=None, subdata=False):
+        """
+        Print table in the terminal
+        """
         space = " "
         dash = "-"
         name = name if name else data["name"]
@@ -493,6 +558,14 @@ class App:
                 "not number": {
                     "en": "not number",
                     "cz": f"{space*6}Parameter *?* není číslo!"
+                },
+                "split date": {
+                    "en": f"{space*6}Not a right format for a date!",
+                    "cz": f"{space*6}Datum je zadané ve špatném formátu!"
+                },
+                "non-numerical date": {
+                    "en": f"{space*6}Not a right format for a date!",
+                    "cz": f"{space*6}Datum musí být zadané v číselném formátu!"
                 },
             }
         }
