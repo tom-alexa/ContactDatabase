@@ -20,7 +20,7 @@ DB_NAME = "contacts.db"
 
 class App:
     OPTIONS = {
-        "q": ("q", "quit", "exit"),
+        "q": ("q", "quit", "e", "exit"),
         "l": ("l", "list"),
         "i": ("i", "insert"),
         "d": ("d", "delete"),
@@ -102,7 +102,6 @@ class App:
                     mode = self.get_parameter_mode(data, param)
                     if not self.check_valid_param(data, param, "parameter"):
                         break
-
                 else:
                     if mode == "table":
                         self.mode_table(data, param)
@@ -120,24 +119,16 @@ class App:
                         if done: break
 
                     elif mode == "date":
-                        self.mode_data(data, param)
-
+                        self.mode_date(data, param)
+                        break
 
                     else:
-                        rows, valid, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
-                        data["data"].extend(rows)
-                        if (data["name"] != "name similar contact") and not similar:
-                            data["name"] = "name same contact"
-                        else:
-                            data["name"] = "name similar contact"
-                        data["input"] += f"{param} "
-                        done = True
+                        self.mode_name(data, param)
             else:
                 if not data["input"]:
                     data["name"] = f"no parameter {mode}"
         else:
             self.mode_table(data, "contact")
-        print(data)
         self.print_show(data)
 
     #########################
@@ -147,7 +138,7 @@ class App:
     def valid_option(self, option):
         for values in self.OPTIONS.values():
             if option in values: return True
-        else: return False
+        return False
 
     def get_parameter_mode(self, data, param):
         param = param.lower()
@@ -176,6 +167,18 @@ class App:
     #  show → modes  #
     ##################
 
+    def mode_name(self, data, param):
+        rows, _, similar = self._db.select("contact", {"first_name": param, "last_name": param}, operant="OR")
+        for row in rows:
+            if row not in data["data"]:
+                data["data"].append(row)
+
+        if (data["name"] != "name similar contact") and not similar:
+            data["name"] = "name same contact"
+        else:
+            data["name"] = "name similar contact"
+        data["input"] += f"{param} "
+
     def mode_table(self, data, table_name):
         data["input"] = table_name
         for table, values in self.TABLES.items():
@@ -193,6 +196,7 @@ class App:
             self.change_to_group(data)
         elif table == "phone_number":
             self.add_plus_sign(data)
+            self.change_to_contact_name(data)
         elif table == "prefix":
             self.add_plus_sign(data)
 
@@ -210,6 +214,7 @@ class App:
         data["chosen"] = groups[0][1]
         data["data"], _, _ = self._db.select("contact", {"group_id": int(groups[0][0])})
         data["name"] = "group contact"
+        self.change_to_group(data)
 
     def mode_number(self, data, param):
         if not (param.isnumeric() and int(param) > 0):
@@ -259,17 +264,22 @@ class App:
     def mode_date(self, data, param):
         data["input"] = param
         date = param.split("/")
-        # if len(date) != 3:
-        #     valid = False
-        #     data["name"] = "split date"
-        #     break
-        # elif any(map(lambda x: (x) and (not x.isnumeric()), date)):
-        #     valid = False
-        #     data["name"] = "non-numerical date"
-        #     break
-        # data["data"], valid, _ = self._db.select("contact", {"date_of_birth": date})
-        # data["name"] = "date contact"
-        # break
+        if len(date) != 3:
+            data["valid"] = False
+            data["name"] = "split date"
+            return
+        elif not any(date):
+            data["valid"] = False
+            data["name"] = "no-input date"
+            return
+        elif not all(map(lambda x: x.isnumeric(), filter(None, date))):
+            data["valid"] = False
+            data["name"] = "non-numerical date"
+            print("yy")
+            return
+        data["data"], _, _ = self._db.select("contact", {"date_of_birth": date})
+        data["name"] = "date contact"
+        self.change_to_group(data)
 
     ##########################
     #  show → modes → table  #
@@ -281,6 +291,17 @@ class App:
                 groups, _, _ = self._db.select("contact_group", {"id": row[4]})
                 data["data"][i] = list(row)
                 data["data"][i][4] = groups[0][1]
+                data["data"][i] = tuple(data["data"][i])
+
+    def change_to_contact_name(self, data):
+        for i, row in enumerate(data["data"].copy()):
+            if row[3]:
+                contacts, _, _ = self._db.select("contact", {"id": row[3]})
+                first_name = contacts[0][1] if contacts[0][1] else ""
+                last_name = contacts[0][2] if contacts[0][2] else ""
+                space = " " if first_name and last_name else ""
+                data["data"][i] = list(row)
+                data["data"][i][3] = f"{first_name}{space}{last_name}"
                 data["data"][i] = tuple(data["data"][i])
 
     def add_plus_sign(self, data):
@@ -295,60 +316,92 @@ class App:
     ##################
 
     def print_show(self, data):
-        space = " "
-        dash = "-"
-
         name = data["name"]
         if "all" in name:
-            all_constants = self.TO_PRINT["print"][name]
-            spaces = all_constants["spaces"]
+            self.print_table(data)
 
-            columns_length = {"header": [], "values": []}
-            for column_name in all_constants["columns"][self._language]:
-                str_col_name = f" {column_name} "
-                columns_length["header"].append(
-                    {
-                        "text": str_col_name,
-                        "length": len(str_col_name)
-                    }
-                )
+        elif name == "name same contact":
+            self.print_table(data, name="all contact")
 
-            for i, row in enumerate(data["data"]):
-                t = 1
-                columns_length["values"].append([])
-                for j, column in enumerate(row):
-                    if column == None:
-                        column = ""
-                    str_col = f" {column} "
-                    columns_length["values"][i].append(str_col)
-                    t += len(str_col) + 1
-                    columns_length["header"][j]["length"] = max(columns_length["header"][j]["length"], len(str_col))
+        elif name == "name similar contact":
+            self.print_table(data, name="all contact")
 
-            total_length = 1
-            for column in columns_length["header"]:
-                total_length += column["length"] + 1
+        elif name == "group contact":
+            self.print_table(data, name="all contact")
 
-            print(f"\n{spaces}|", end="")
-            for i, column in enumerate(columns_length["header"]):
-                column_name = column["text"]
-                current_spaces = space * (columns_length["header"][i]["length"] - len(column_name))
-                print(f"{column_name}{current_spaces}|", end="")
-            
-            print(f"\n{spaces}{dash*total_length}")
+        elif name == "similar group":
+            self.print_table(data, name="all contact_group")
 
-            for i, row in enumerate(columns_length["values"]):
-                print(f"{spaces}|", end="")
-                for j, column_value in enumerate(row):
-                    current_spaces = space * (columns_length["header"][j]["length"] - len(column_value))
-                    print(f"{column_value}{current_spaces}|", end="")
-                print()
+        elif name == "no group":
+            self.print_table(data, name="all contact_group")
 
+        elif name == "not number":
+            parameter = data["input"]
+            print(self.TO_PRINT["print"]["not number"][self._language].replace("*?*", f"'{parameter}'"))
 
+        elif "no parameter" in name:
+            mode = name[13:]
+            print(self.TO_PRINT["print"]["no parameter"][self._language].replace("*?*", f"'{mode}'"))
 
-        elif name == "no parameter":
-            i = data["input"]
-            print(self.TO_PRINT["print"]["no parameter"][self._language].replace("*?*", f"'{i}'"))
+        elif not data["valid"]:
+            if name == "parameter":
+                parameter = data["input"][1:]
+                print(self.TO_PRINT["print"]["parameter"][self._language].replace("*?*", f"'{parameter}'"))
+
+            elif name == "table":
+                table = data["input"]
+                print(self.TO_PRINT["print"]["table"][self._language].replace("*?*", f"'{table}'"))
+
         print()
+        print(data)
+
+    def print_table(self, data, name=None):
+        space = " "
+        dash = "-"
+        name = name if name else data["name"]
+
+        all_constants = self.TO_PRINT["print"][name]
+        spaces = all_constants["spaces"]
+
+        columns_length = {"header": [], "values": []}
+        for column_name in all_constants["columns"][self._language]:
+            str_col_name = f" {column_name} "
+            columns_length["header"].append(
+                {
+                    "text": str_col_name,
+                    "length": len(str_col_name)
+                }
+            )
+
+        for i, row in enumerate(data["data"]):
+            t = 1
+            columns_length["values"].append([])
+            for j, column in enumerate(row):
+                if column == None:
+                    column = ""
+                str_col = f" {column} "
+                columns_length["values"][i].append(str_col)
+                t += len(str_col) + 1
+                columns_length["header"][j]["length"] = max(columns_length["header"][j]["length"], len(str_col))
+
+        total_length = 1
+        for column in columns_length["header"]:
+            total_length += column["length"] + 1
+
+        print(f"\n{spaces}|", end="")
+        for i, column in enumerate(columns_length["header"]):
+            column_name = column["text"]
+            current_spaces = space * (columns_length["header"][i]["length"] - len(column_name))
+            print(f"{current_spaces}{column_name}|", end="")
+        
+        print(f"\n{spaces}{dash*total_length}")
+
+        for i, row in enumerate(columns_length["values"]):
+            print(f"{spaces}|", end="")
+            for j, column_value in enumerate(row):
+                current_spaces = space * (columns_length["header"][j]["length"] - len(column_value))
+                print(f"{current_spaces}{column_value}|", end="")
+            print()
 
     ############
     #  insert  #
@@ -427,8 +480,20 @@ class App:
                 },
                 "no parameter": {
                     "en": "no parameter",
-                    "cz": f"{space*6}Pro *?* chybí parameter"
-                }
+                    "cz": f"{space*6}Pro *?* chybí parameter!"
+                },
+                "parameter": {
+                    "en": "wrong parameter",
+                    "cz": f"{space*6}Parameter *?* neexistuje!"
+                },
+                "table": {
+                    "en": "wrong table",
+                    "cz": f"{space*6}Tabulka *?* neexistuje!\n{space*6}Zkus 'contact', 'group', 'number', 'prefix'."
+                },
+                "not number": {
+                    "en": "not number",
+                    "cz": f"{space*6}Parameter *?* není číslo!"
+                },
             }
         }
 
