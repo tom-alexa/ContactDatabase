@@ -12,18 +12,20 @@ from pathlib import Path
 
 # languages → (cz, en)
 LANGUAGE = "cz"
+DB_PATH = "database/"
 DB_NAME = "contacts.db"
 
 
-#############
-#  classes  #
-#############
+#########
+#  App  #
+#########
 
 class App:
     OPTIONS = {
         "q": ("q", "quit", "e", "exit"),
         "l": ("l", "list"),
         "i": ("i", "insert"),
+        "u": ("u", "update"),
         "d": ("d", "delete"),
         "h": ("h", "help")
     }
@@ -33,6 +35,9 @@ class App:
             "group": ("-g", "--group"),
             "number": ("-n", "--number"),
             "date": ("-d", "--date"),
+        },
+        "i": {
+
         }
     }
     TABLES = {
@@ -62,6 +67,7 @@ class App:
             self.manage_option(option, parameters)
         self.close()
 
+
     def get_option(self):
         """
         Input format: 'option' 'parameter' 'parameter', ex. l -t contact
@@ -78,6 +84,7 @@ class App:
                 continue
             return option, parameters
 
+
     def manage_option(self, option, parameters):
         """
         Manage user input and do something
@@ -89,7 +96,9 @@ class App:
         elif option in self.OPTIONS["l"]:   # list
             self.show(parameters)
         elif option in self.OPTIONS["i"]:   # insert
-            pass
+            self.insert(parameters)
+        elif option in self.OPTIONS["u"]:
+            self.update(parameters)
         elif option in self.OPTIONS["d"]:   # delete
             pass
 
@@ -139,6 +148,7 @@ class App:
             self.mode_table(data, "contact")
         self.print_show(data)
 
+
     #########################
     #  show → subfunctions  #
     #########################
@@ -151,6 +161,7 @@ class App:
         for values in self.OPTIONS.values():
             if option in values: return True
         return False
+
 
     def get_parameter_mode(self, data, param):
         """
@@ -169,6 +180,7 @@ class App:
             mode = None
             data["valid"] = False
         return mode
+
 
     def check_valid_param(self, data, param, error_name=None):
         """
@@ -201,6 +213,7 @@ class App:
             data["name"] = "name similar contact"
         data["input"] += f"{param} "
 
+
     def mode_table(self, data, table_name):
         """
         Select rows from given table name
@@ -224,6 +237,7 @@ class App:
             self.change_to_contact_name(data)
         elif table == "prefix":
             self.add_plus_sign(data)
+
 
     def mode_group(self, data, group_name):
         """
@@ -292,6 +306,7 @@ class App:
             data["data"][contact_id] = {"contact": rows[0], "numbers": [number]}
         return True
 
+
     def mode_date(self, data, param):
         """
         Select contacts with same date of birth as given date (year, month or day)
@@ -314,6 +329,7 @@ class App:
         data["name"] = "date contact"
         self.change_to_group(data)
 
+
     ##########################
     #  show → modes → table  #
     ##########################
@@ -329,6 +345,7 @@ class App:
                 data["data"][i][4] = groups[0][1]
                 data["data"][i] = tuple(data["data"][i])
 
+
     def change_to_contact_name(self, data):
         """
         Change contact id to contact first name and last name
@@ -343,6 +360,7 @@ class App:
                 data["data"][i][3] = f"{first_name}{space}{last_name}"
                 data["data"][i] = tuple(data["data"][i])
 
+
     def add_plus_sign(self, data):
         """
         Add '+' in front of prefix
@@ -352,6 +370,7 @@ class App:
                 data["data"][i] = list(row)
                 data["data"][i][1] = f"+{row[1]}"
                 data["data"][i] = tuple(data["data"][i])
+
 
     ##################
     #  show → print  #
@@ -417,6 +436,7 @@ class App:
                 print(self.TO_PRINT["print"]["table"][self._language].replace("*?*", f"'{table}'"))
         print()
 
+
     def print_table(self, data, name=None, subdata=False):
         """
         Print table in the terminal
@@ -468,15 +488,141 @@ class App:
                 print(f"{current_spaces}{column_value}|", end="")
             print()
 
+
     ############
     #  insert  #
     ############
 
-    def insert(parameters):
+    def insert(self, parameters):
+        """
+        User option "I"
+        Insert something into the database
+        """
+        data = {"table": "contact", "data": []}
+        if parameters:
+            mode = None
+            for param in parameters:
+                if param[0] == "-":
+                    if False:
+                        pass
+                    else:
+                        print("wrong parameter")
+                else:
+                    if mode == "table":
+                        for table, values in self.TABLES.items():
+                            if param in values:
+                                data["table"] = table
+                                mode = None
+                                break
+                        else:
+                            print("wrong table")
+                    else:
+                        data["data"].append(param)
+                        data["table"] = "contact"
+        self.insert_data(data)
+
+
+    ###########################
+    #  insert → subfunctions  #
+    ###########################
+
+    def insert_data(self, data):
+        table = data["table"]
+        if table == "contact":
+            first_name = self.ask_question("First name: ")
+            last_name = self.ask_question("Last name: ")
+            date_of_birth = self.ask_question("Date of birth: ", date=True)
+            group_id = self.ask_question("Group_id: ", number=True)
+            street = self.ask_question("Street: ")
+            nod = self.ask_question("Number of descriptive: ", number=True)
+            city = self.ask_question("City: ")
+            everything = {}
+            if first_name:
+                everything["first_name"] = first_name
+            if last_name:
+                everything["last_name"] = last_name
+            if date_of_birth:
+                everything["date_of_birth"] = date_of_birth
+            if group_id:
+                everything["group_id"] = group_id
+            if street:
+                everything["street"] = street
+            if nod:
+                everything["number_of_descriptive"] = nod
+            if city:
+                everything["city"] = city
+            self._db.insert(table, everything)
+        elif table == "contact_group":
+            pass
+        elif table == "phone_number":
+            pass
+        elif table == "prefix":
+            pass
+
+
+    def ask_question(self, question, mandatory=False, date=False, number=False):
+        while True:
+            answer = input(question)
+            if not mandatory and not answer:
+                return answer
+            if date:
+                try:
+                    a_split = answer.split("/")
+                    if len(a_split) != 3:
+                        raise ValueError
+                    answer = f"{int(a_split[0]):04d}-{int(a_split[1]):02d}-{int(a_split[2]):02d}"
+                    return answer
+                except ValueError:
+                    print("  Has to be a in format YYYY/MM/DD!\n")
+            if number:
+                try:
+                    answer = int(answer)
+                    return answer
+                except ValueError:
+                    print("  Has to be a number!\n")
+            else:
+                return answer
+
+
+    ############
+    #  update  #
+    ############
+
+    def update(self, parameters):
+        """
+        User option "I"
+        Insert something into the database
+        """
+        data = {"table": "contact", "data": []}
+        if parameters:
+            mode = None
+            for param in parameters:
+                if param[0] == "-":
+                    if False:
+                        pass
+                    else:
+                        print("wrong parameter")
+                else:
+                    if mode == "table":
+                        for table, values in self.TABLES.items():
+                            if param in values:
+                                data["table"] = table
+                                mode = None
+                                break
+                        else:
+                            print("wrong table")
+                    else:
+                        data["data"].append(param)
+                        data["table"] = "contact"
+        self.insert_data(data)
+
+    ############
+    #  delete  #
+    ############
+
+    def delete(self, parameters):
         pass
 
-    def delete(parameters):
-        pass
 
     ###########
     #  print  #
@@ -485,8 +631,10 @@ class App:
     def wrong_command(self, option):
         print(self.TO_PRINT["print"]["wrong"][self._language].replace("*?*", f"'{option}'"))
 
+
     def print_options(self):
         print(self.TO_PRINT["print"]["options"][self._language])
+
 
     #######################
     #  print → constants  #
@@ -570,6 +718,7 @@ class App:
             }
         }
 
+
     #############
     #  general  #
     #############
@@ -577,6 +726,10 @@ class App:
     def close(self):
         self._db.close()
 
+
+#####################
+#  ContactDatabase  #
+#####################
 
 class ContactDatabase:
     TABLES = {
@@ -587,13 +740,13 @@ class ContactDatabase:
     }
 
     def __init__(self):
-        self.db_path = Path(f"{Path(__file__).parent.resolve()}/database/{DB_NAME}")
+        self.db_path = Path(f"{Path(__file__).parent.resolve()}/{DB_PATH}{DB_NAME}")
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
         self.create_database()
 
-    def select(self, table, parameters: dict, operant="AND", similar=False):
 
+    def select(self, table, parameters: dict, operant="AND", similar=False):
         if table in self.TABLES:
             columns = self.TABLES[table]
         else:
@@ -643,6 +796,17 @@ class ContactDatabase:
         if data or similar: return data, True, similar
         return self.select(table, parameters, operant, similar=True)
 
+
+    def insert(self, table, parameters: dict):
+        columns = ", ".join(parameters.keys())
+        values = ""
+        for value in parameters.values():
+            values += f"'{value}', "
+        values = values[:-2]
+        self.cursor.execute(f"INSERT INTO {table} ({columns}) VALUES ({values})")
+        self.connection.commit()
+
+
     def create_database(self):
         """
         Create database tables if not already exists
@@ -689,6 +853,7 @@ class ContactDatabase:
         for table in tables:
             self.cursor.execute(table)
         self.connection.commit()
+
 
     def close(self):
         self.connection.close()
