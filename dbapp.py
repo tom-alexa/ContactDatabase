@@ -283,27 +283,21 @@ class App:
 
         if data["input"]:
             data["input"] += f"{param} "
-            numbers, _, _ = self._db.select("phone_number", {"number": param, "prefix_id": data["input"][1:]}, similar=True)
+            numbers, _, _ = self._db.select("phone_number", {"number": int(param), "prefix_id": data["input"][1:]}, similar=True)
         else:
-            numbers, _, _ = self._db.select("phone_number", {"number": param}, similar=True)
+            numbers, _, _ = self._db.select("phone_number", {"number": int(param)}, similar=True)
             data["input"] = param
-
         if not numbers:
             data["valid"] = False
             data["name"] = "no number"
             return True
 
         data["name"] = "number contact"
-        active_ids = set()
-        data["data"] = {}
+        data["data"] = []
         for number in numbers:
-            rows, _, _ = self._db.select("contact", {"id": number[3]})
-            contact_id = rows[0][0]
-            if contact_id in active_ids:
-                data["data"][contact_id]["numbers"].append(number)
-                continue
-            active_ids.add(contact_id)
-            data["data"][contact_id] = {"contact": rows[0], "numbers": [number]}
+            if number[3]:
+                rows, _, _ = self._db.select("contact", {"id": number[3]})
+                data["data"].extend(rows)
         return True
 
 
@@ -400,7 +394,7 @@ class App:
             self.print_table(data, name="all contact_group")
 
         elif name == "number contact":
-            # self.print_table(data, name="all contact", subdata=True)
+            self.print_table(data, name="all contact")
             pass
 
         elif name == "not number":
@@ -608,7 +602,7 @@ class App:
             if parameters[0] in self.PARAMETERS["i"]["phone_number"]:
                 data["table"] = "phone_number"
                 id_to_update = self.ask_question("Upravit číslo pro [ID]: ", mandatory=True, number=True)
-                numbers = self._db.select("phone_numbers", {})[0]
+                numbers = self._db.select("phone_number", {})[0]
                 if numbers: 
                     number_ids = [x[0] for x in numbers]
                     if id_to_update in number_ids:
@@ -713,11 +707,11 @@ class App:
             else:
                 print("  Kontakt neexistuje!\n")
         elif table == "phone_number":
-            id_to_delete = self.ask_question("Contact ID: ", mandatory=True, number=True)
-            contacts = self._db.select("contact", {})[0]
-            if contacts: 
-                contact_ids = [x[0] for x in contacts]
-                if id_to_delete in contact_ids:
+            id_to_delete = self.ask_question("Phone number ID: ", mandatory=True, number=True)
+            phone_numbers = self._db.select("phone_number", {})[0]
+            if phone_numbers: 
+                phone_number_ids = [x[0] for x in phone_numbers]
+                if id_to_delete in phone_number_ids:
                     self._db.delete("phone_number", id_to_delete)
                 else:
                     print("  Číslo neexistuje!\n")
@@ -757,7 +751,7 @@ class App:
             "print": {
                 "options": {
                     "en": f"{dash_options}\nH {comma*20} show this table\nL {comma*20} list all contacts\nL (contact name) ... show contact with given name or similar ones\nL -n (number) ... show contacts with given number or similar\nL -g (group) ... show contacts within group\nL -t (table) ... show all rows in a table\nL -d (date) ... show contacts that date of birth matches with given date → format: YYYY-MM-DD\n{space*78}day: --DD\n{space*76}month: -MM-\n{space*77}year: YYYY--\nI ... insert row into contact table\nI -t (table) ... insert row into table\nD ... delete row from contact table\nD -t (table) ... delete row from table\nQ ... quit the application\n{dash*20}",
-                    "cz": f"{spaces_options}{dash_options}\n{spaces_options}| H {comma*16} ukáže tuto tabulku{space*40}|\n{spaces_options}| L (jméno) {comma*8} ukáže kontakt podle jména nebo podobné kontakty{space*11}|\n{spaces_options}| L -n (číslo) {comma*5} ukáže kontakty podle čísla nebo podobné kontakty{space*10}|\n{spaces_options}| L -g (skupina) {comma*3} ukáže kontakty ve skupině{space*33}|\n{spaces_options}| L -t (tabulka) {comma*3} ukáže všechny řádky v tabulce{space*29}|\n{spaces_options}| L -d (datum) {comma*5} ukáže kontakty podle data narození → formát: YYYY/MM/DD{space*3}|\n{spaces_options}|{space*60}den: //DD{space*9}|\n{spaces_options}|{space*58}měsíc: /MM/{space*9}|\n{spaces_options}|{space*60}rok: YYYY//{space*7}|\n{spaces_options}| I {comma*16} vloží kontakt do tabulky{space*34}|\n{spaces_options}| I -t (tabulka) {comma*3} vloží řádek do tabulky{space*36}|\n{spaces_options}| D {comma*16} odstraní kontakt{space*42}|\n{spaces_options}| D -t (tabulka) {comma*3} odstraní řádek z tabulky{space*34}|\n{spaces_options}| Q {comma*16} ukončí aplikaci{space*43}|\n{spaces_options}{dash_options}",
+                    "cz": f"{spaces_options}{dash_options}\n{spaces_options}| H {comma*16} ukáže tuto tabulku{space*40}|\n{spaces_options}| L (jméno) {comma*8} ukáže kontakt podle jména nebo podobné kontakty{space*11}|\n{spaces_options}| L -n (číslo) {comma*5} ukáže kontakty podle čísla nebo podobné kontakty{space*10}|\n{spaces_options}| L -g (skupina) {comma*3} ukáže kontakty ve skupině{space*33}|\n{spaces_options}| L -t (tabulka) {comma*3} ukáže všechny řádky v tabulce{space*29}|\n{spaces_options}| L -d (datum) {comma*5} ukáže kontakty podle data narození → formát: YYYY/MM/DD{space*3}|\n{spaces_options}|{space*60}den: //DD{space*9}|\n{spaces_options}|{space*58}měsíc: /MM/{space*9}|\n{spaces_options}|{space*60}rok: YYYY//{space*7}|\n{spaces_options}| I {comma*16} vloží kontakt do tabulky{space*34}|\n{spaces_options}| I (tabulka) {comma*6} vloží řádek do tabulky{space*36}|\n{spaces_options}| D {comma*16} odstraní kontakt{space*42}|\n{spaces_options}| D (tabulka) {comma*6} odstraní řádek z tabulky{space*34}|\n{spaces_options}| U {comma*16} uprav kontakt{space*45}|\n{spaces_options}| U (tabulka) {comma*6} uprav řádek z tabulky{space*37}|\n{spaces_options}| Q {comma*16} ukončí aplikaci{space*43}|\n{spaces_options}{dash_options}",
                 },
                 "wrong": {
                     "en": f"{space*6}Bash *?* does not exists!\n",
@@ -973,6 +967,15 @@ class ContactDatabase:
             self.cursor.execute(table)
         self.connection.commit()
         self.cursor.execute("PRAGMA foreign_keys = OFF;")
+        self.connection.commit()
+
+        inserts = [
+            """INSERT INTO contact_group (name) VALUES
+                ("family"), ("friends"), ("work")
+            """
+        ]
+        for ins in inserts:
+            self.cursor.execute(ins)
         self.connection.commit()
 
 
