@@ -12,7 +12,7 @@ from pathlib import Path
 
 # languages → (cz, en)
 LANGUAGE = "cz"
-DB_PATH = "database/"
+DB_PATH = "database"
 DB_NAME = "contacts.db"
 
 
@@ -37,7 +37,7 @@ class App:
             "date": ("-d", "--date"),
         },
         "i": {
-
+            "phone_number": ("phone_number", "number", "n")
         }
     }
     TABLES = {
@@ -100,7 +100,7 @@ class App:
         elif option in self.OPTIONS["u"]:
             self.update(parameters)
         elif option in self.OPTIONS["d"]:   # delete
-            pass
+            self.delete(parameters)
 
     ##########
     #  show  #
@@ -500,25 +500,8 @@ class App:
         """
         data = {"table": "contact", "data": []}
         if parameters:
-            mode = None
-            for param in parameters:
-                if param[0] == "-":
-                    if False:
-                        pass
-                    else:
-                        print("wrong parameter")
-                else:
-                    if mode == "table":
-                        for table, values in self.TABLES.items():
-                            if param in values:
-                                data["table"] = table
-                                mode = None
-                                break
-                        else:
-                            print("wrong table")
-                    else:
-                        data["data"].append(param)
-                        data["table"] = "contact"
+            if parameters[0] in self.PARAMETERS["i"]["phone_number"]:
+                data["table"] = "phone_number"
         self.insert_data(data)
 
 
@@ -529,22 +512,32 @@ class App:
     def insert_data(self, data):
         table = data["table"]
         if table == "contact":
+            everything = {}
             first_name = self.ask_question("First name: ")
             last_name = self.ask_question("Last name: ")
             date_of_birth = self.ask_question("Date of birth: ", date=True)
-            group_id = self.ask_question("Group_id: ", number=True)
+            group_id = self.ask_question("Group ID: ", number=True)
+            if group_id:
+                groups = self._db.select("contact_group", {})[0]
+                if groups: 
+                    contact_group_ids = [x[0] for x in groups]
+                    if group_id in contact_group_ids:
+                        everything["group_id"] = group_id
+                    else:
+                        print("  Skupina neexistuje!\n")
+                        group_id = self.ask_question("Group ID: ", number=True)
+                else:
+                    print("  Skupina neexistuje!\n")
+                    group_id = self.ask_question("Group ID: ", number=True)
             street = self.ask_question("Street: ")
             nod = self.ask_question("Number of descriptive: ", number=True)
             city = self.ask_question("City: ")
-            everything = {}
             if first_name:
                 everything["first_name"] = first_name
             if last_name:
                 everything["last_name"] = last_name
             if date_of_birth:
                 everything["date_of_birth"] = date_of_birth
-            if group_id:
-                everything["group_id"] = group_id
             if street:
                 everything["street"] = street
             if nod:
@@ -555,7 +548,23 @@ class App:
         elif table == "contact_group":
             pass
         elif table == "phone_number":
-            pass
+            number = self.ask_question("Number: ", number=True, mandatory=True)
+            prefix_id = self.ask_question("Kód země: ", number=True)
+            contact_id = self.ask_question("Contact ID: ", number=True)
+            everything = {"prefix_id": prefix_id}
+            if number:
+                everything["number"] = number
+            if contact_id:
+                contacts = self._db.select("contact", {})[0]
+                if contacts: 
+                    contact_ids = [x[0] for x in contacts]
+                    if contact_id in contact_ids:
+                        everything["contact_id"] = contact_id
+                    else:
+                        print("  Kontakt neexistuje!\n")
+                else:
+                    print("  Kontakt neexistuje!\n")
+            self._db.insert(table, everything)
         elif table == "prefix":
             pass
 
@@ -574,6 +583,7 @@ class App:
                     return answer
                 except ValueError:
                     print("  Has to be a in format YYYY/MM/DD!\n")
+                    continue
             if number:
                 try:
                     answer = int(answer)
@@ -590,39 +600,129 @@ class App:
 
     def update(self, parameters):
         """
-        User option "I"
+        User option "U"
         Insert something into the database
         """
         data = {"table": "contact", "data": []}
         if parameters:
-            mode = None
-            for param in parameters:
-                if param[0] == "-":
-                    if False:
-                        pass
+            if parameters[0] in self.PARAMETERS["i"]["phone_number"]:
+                data["table"] = "phone_number"
+                id_to_update = self.ask_question("Upravit číslo pro [ID]: ", mandatory=True, number=True)
+                numbers = self._db.select("phone_numbers", {})[0]
+                if numbers: 
+                    number_ids = [x[0] for x in numbers]
+                    if id_to_update in number_ids:
+                        number = self.ask_question("Number: ", number=True, mandatory=True)
+                        prefix_id = self.ask_question("Kód země: ", number=True)
+                        contact_id = self.ask_question("Contact ID: ", number=True)
+                        everything = {"prefix_id": prefix_id}
+                        if number:
+                            everything["number"] = number
+                        if contact_id:
+                            contacts = self._db.select("contact", {})[0]
+                            if contacts: 
+                                contact_ids = [x[0] for x in contacts]
+                                if contact_id in contact_ids:
+                                    everything["contact_id"] = contact_id
+                                else:
+                                    print("  Kontakt neexistuje!\n")
+                                    return
+                            else:
+                                print("  Kontakt neexistuje!\n")
+                                return
                     else:
-                        print("wrong parameter")
+                        print("  Číslo neexistuje!\n")
+                        return
                 else:
-                    if mode == "table":
-                        for table, values in self.TABLES.items():
-                            if param in values:
-                                data["table"] = table
-                                mode = None
-                                break
+                    print("  Číslo neexistuje!\n")
+                    return
+        else:
+            id_to_update = self.ask_question("Upravit kontakt pro [ID]: ", mandatory=True, number=True)
+            contacts = self._db.select("contact", {})[0]
+            if contacts:
+                contact_ids = [x[0] for x in contacts]
+                if id_to_update in contact_ids:
+                    everything = {}
+                    first_name = self.ask_question("First name: ")
+                    last_name = self.ask_question("Last name: ")
+                    date_of_birth = self.ask_question("Date of birth: ", date=True)
+                    group_id = self.ask_question("Group ID: ", number=True)
+                    if group_id:
+                        groups = self._db.select("contact_group", {})[0]
+                        if groups: 
+                            contact_group_ids = [x[0] for x in groups]
+                            if group_id in contact_group_ids:
+                                everything["group_id"] = group_id
+                            else:
+                                print("  Skupina neexistuje!\n")
+                                group_id = self.ask_question("Group ID: ", number=True)
                         else:
-                            print("wrong table")
-                    else:
-                        data["data"].append(param)
-                        data["table"] = "contact"
-        self.insert_data(data)
+                            print("  Skupina neexistuje!\n")
+                            group_id = self.ask_question("Group ID: ", number=True)
+                    street = self.ask_question("Street: ")
+                    nod = self.ask_question("Number of descriptive: ", number=True)
+                    city = self.ask_question("City: ")
+                    if first_name:
+                        everything["first_name"] = first_name
+                    if last_name:
+                        everything["last_name"] = last_name
+                    if date_of_birth:
+                        everything["date_of_birth"] = date_of_birth
+                    if street:
+                        everything["street"] = street
+                    if nod:
+                        everything["number_of_descriptive"] = nod
+                    if city:
+                        everything["city"] = city
+                else:
+                    print("  Kontakt neexistuje!\n")
+                    return
+            else:
+                print("  Kontakt neexistuje!\n")
+                return
+        self._db.update(data["table"], everything, id_to_update)
+
 
     ############
     #  delete  #
     ############
 
     def delete(self, parameters):
-        pass
+        """
+        User option "D"
+        Insert something into the database
+        """
+        data = {"table": "contact", "data": []}
+        if parameters:
+            if parameters[0] in self.PARAMETERS["i"]["phone_number"]:
+                data["table"] = "phone_number"
+        self.delete_data(data)
 
+
+    def delete_data(self, data):
+        table = data["table"]
+        if table == "contact":
+            id_to_delete = self.ask_question("Contact ID: ", mandatory=True, number=True)
+            contacts = self._db.select("contact", {})[0]
+            if contacts: 
+                contact_ids = [x[0] for x in contacts]
+                if id_to_delete in contact_ids:
+                    self._db.delete("contact", id_to_delete)
+                else:
+                    print("  Kontakt neexistuje!\n")
+            else:
+                print("  Kontakt neexistuje!\n")
+        elif table == "phone_number":
+            id_to_delete = self.ask_question("Contact ID: ", mandatory=True, number=True)
+            contacts = self._db.select("contact", {})[0]
+            if contacts: 
+                contact_ids = [x[0] for x in contacts]
+                if id_to_delete in contact_ids:
+                    self._db.delete("phone_number", id_to_delete)
+                else:
+                    print("  Číslo neexistuje!\n")
+            else:
+                print("  Číslo neexistuje!\n")
 
     ###########
     #  print  #
@@ -740,7 +840,7 @@ class ContactDatabase:
     }
 
     def __init__(self):
-        self.db_path = Path(f"{Path(__file__).parent.resolve()}/{DB_PATH}{DB_NAME}")
+        self.db_path = Path(f"{Path(__file__).parent.resolve()}/{DB_PATH}/{DB_NAME}")
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
         self.create_database()
@@ -801,9 +901,28 @@ class ContactDatabase:
         columns = ", ".join(parameters.keys())
         values = ""
         for value in parameters.values():
-            values += f"'{value}', "
+            if type(value) is int:
+                values += f"{value}, "
+            else:
+                values += f"'{value}', "
         values = values[:-2]
-        self.cursor.execute(f"INSERT INTO {table} ({columns}) VALUES ({values})")
+        self.cursor.execute(f"INSERT INTO {table} ({columns}) VALUES ({values});")
+        self.connection.commit()
+
+
+    def update(self, table, parameters: dict, id_to_update):
+        to_update = ""
+        for column, value in parameters.items():
+            if type(value) is int:
+                to_update += f"{column} = {value}, "
+            else:
+                to_update += f"{column} = '{value}', "
+        to_update = to_update[:-2]
+        self.cursor.execute(f"UPDATE {table} SET {to_update} WHERE id = {id_to_update};")
+
+
+    def delete(self, table, id_to_delete):
+        self.cursor.execute(f"DELETE FROM {table} WHERE id = {id_to_delete}")
         self.connection.commit()
 
 
@@ -852,6 +971,8 @@ class ContactDatabase:
         self.cursor.execute("PRAGMA case_sensitive_like = false;")
         for table in tables:
             self.cursor.execute(table)
+        self.connection.commit()
+        self.cursor.execute("PRAGMA foreign_keys = OFF;")
         self.connection.commit()
 
 
