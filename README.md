@@ -1,5 +1,11 @@
 # ContactDatabase
 
+## Rozdíly úkolu a githubu
+
+- umístění databáze
+    - github: ve složce database
+    - úkol: ve stejné složce jako dbapp.py
+
 ## Funkce
 
 Aplikace slouží k práci s databází na konktakty
@@ -19,7 +25,7 @@ Aplikace slouží k práci s databází na konktakty
     - l -n {číslo} | ukáže podobné kontakty podle čísla
     - l -d {datum} | ukáže kontakty s datem narození v jednom z daných hodnot
         - //11 | ukáže vše ve 20. dni v měsíci
-        - 2003// | zkáže vše v roce 2003
+        - 2003// | ukáže vše v roce 2003
         - 2003/1/ | ukáže vše v roce 2003 a zároveň v lednu
         - 2003/1/11 | ukáže vše v roce 2003 a zároveň v lednu a zároveň v 11. dni v měsíci
     - l -g {skupina} | ukáže všechni kontakty ve skupině

@@ -12,7 +12,7 @@ from pathlib import Path
 
 # languages → (cz, en)
 LANGUAGE = "cz"
-DB_PATH = "database"
+DB_PATH = "database/"
 DB_NAME = "contacts.db"
 
 
@@ -834,7 +834,7 @@ class ContactDatabase:
     }
 
     def __init__(self):
-        self.db_path = Path(f"{Path(__file__).parent.resolve()}/{DB_PATH}/{DB_NAME}")
+        self.db_path = Path(f"{Path(__file__).parent.resolve()}/{DB_PATH}{DB_NAME}")
         self.connection = sqlite3.connect(self.db_path)
         self.cursor = self.connection.cursor()
         self.create_database()
