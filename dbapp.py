@@ -595,7 +595,7 @@ class App:
     def update(self, parameters):
         """
         User option "U"
-        Insert something into the database
+        Update something in the database
         """
         data = {"table": "contact", "data": []}
         if parameters:
@@ -684,7 +684,7 @@ class App:
     def delete(self, parameters):
         """
         User option "D"
-        Insert something into the database
+        Delete something from the database
         """
         data = {"table": "contact", "data": []}
         if parameters:
