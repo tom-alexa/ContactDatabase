@@ -1,5 +1,6 @@
 # IDE
 .vscode
+.idea
 
 # sqlite application
 sqlite3.exe

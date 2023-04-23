@@ -970,9 +970,19 @@ class ContactDatabase:
         self.connection.commit()
 
         inserts = [
-            """INSERT INTO contact_group (name) VALUES
-                ("family"), ("friends"), ("work")
-            """
+            """INSERT INTO contact_group
+                SELECT 1, 'family'
+                WHERE NOT EXISTS (SELECT 1 FROM contact_group WHERE name='family');
+            """,
+            """INSERT INTO contact_group
+                SELECT 2, 'friends'
+                WHERE NOT EXISTS (SELECT 1 FROM contact_group WHERE name='family');
+            """,
+            """INSERT INTO contact_group
+                SELECT 3, 'work'
+                WHERE NOT EXISTS (SELECT 1 FROM contact_group WHERE name='family');
+            """,
+
         ]
         for ins in inserts:
             self.cursor.execute(ins)
